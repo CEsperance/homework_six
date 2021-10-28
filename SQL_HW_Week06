@@ -1,0 +1,189 @@
+--1. Show all customers whose last names start with T. Order them by first name from A-Z.
+EXPLAIN ANALYZE
+SELECT customer_id, first_name, last_name
+FROM customer
+WHERE last_name LIKE 'T%'
+ORDER BY first_name;
+/*selected the fields(columns) that have the customer id, first and last name. 
+The WHERE clause filters the last names to include only last names that start with T. ORDER BY 
+sorted the customers whose last names began with T and put it in alphabetical order based on first name*/
+
+-- 2. Show all rentals returned from 5/28/2005 to 6/1/2005
+SELECT *
+FROM  rental
+WHERE return_date
+BETWEEN '2005-05-28' AND '2005-06-01';
+
+/* All rentals returned between 5/28/2005 and 6/1/2005 were selected. 
+The WHERE clause filtered the return date within the specific date range 
+using the keyword BETWEEN, AND */
+
+-- 3. How would you determine which movies are rented the most?
+SELECT title, film_id, COUNT(rental_id) AS Num_of_rentals
+FROM rental 
+INNER JOIN inventory 
+USING(inventory_id)
+INNER JOIN film 
+USING(film_id)
+GROUP BY film_id
+ORDER BY COUNT(*) DESC;
+/*Join rental, inventory, and film table so you can count the amount of times each rental_id was rented for 
+each movie.  */
+
+-- 4. Show how much each customer spent on movies (for all time) . Order them from least to most.
+SELECT customer_id, SUM(amount) AS total_spent
+FROM payment
+GROUP BY customer_id
+ORDER BY total_spent;
+/* From the payment table, customer id and amount field were selected. The total sum of the amount field
+was returned. The results were groupby by customer id and ordered by the amount each customer spent on movies
+from least amount to greatest amount */
+
+-- 5. Which actor was in the most movies in 2006 (based on this dataset)? 
+-- Be sure to alias the actor name and count as a more descriptive name. 
+-- Order the results from most to least.
+SELECT CONCAT(first_name,' ',last_name) AS actor_name, COUNT(fa.film_id) AS movies
+FROM actor AS a
+INNER JOIN film_actor AS fa
+USING(actor_id)
+INNER JOIN film AS f 
+USING(film_id)
+WHERE release_year = 2006
+GROUP BY actor_name
+ORDER BY movies DESC;
+/* From the actor table, first and last name fields were added together using the CONCAT function and 
+aliased as actor name. Film id was selected from the film actor table and aliased as movies. The film actor 
+table was joined with actor table based on the actor_id column. The film table was joined with the film actor
+table based on the film id column. WHERE clause filtered the release year to only show movies in 2006.
+The rows were group by actor name and ordered by tne amount of films the actors were in from most to least.
+The three tables were joined to get the actor names, release year for 2006, the film id. */
+
+-- 6. Write an explain plan for 4 and 5. Show the queries and explain what is happening in each one. Use the following link to understand how this works http://postgresguide.com/performance/explain.html 
+    -- #4
+EXPLAIN 	
+SELECT customer_id, SUM(amount) AS total_spent
+FROM payment
+GROUP BY customer_id
+ORDER BY total_spent;
+QUERY PLAN
+Sort  (cost=362.06..363.56 rows=599 width=34),  Sort Key: (sum(amount)), -> HashAggregate (cost=326.94..334.43 rows=599 width=34)
+ Group Key: customer_id,  ->  Seq Scan on payment  (cost=0.00..253.96 rows=14596 width=8)
+   --#5
+EXPLAIN 
+SELECT CONCAT(first_name,' ',last_name) AS actor_name, COUNT(fa.film_id) AS movies
+FROM actor AS a
+INNER JOIN film_actor AS fa
+USING(actor_id)
+INNER JOIN film AS f 
+USING(film_id)
+WHERE release_year = 2006
+GROUP BY actor_name
+ORDER BY movies DESC;
+
+QUERY PLAN
+Sort  (cost=246.20..246.52 rows=128 width=40),   Sort Key: (count(fa.film_id)) DESC,  
+->  HashAggregate  (cost=240.12..241.72 rows=128 width=40)
+ Group Key: concat(a.first_name, ' ', a.last_name), 
+->  Hash Join  (cost=85.50..212.81 rows=5462 width=34), Hash Cond: (fa.film_id = f.film_id)
+->  Hash Join  (cost=6.50..105.76 rows=5462 width=15), Hash Cond: (fa.actor_id = a.actor_id) 
+->  Seq Scan on film_actor fa  (cost=0.00..84.62 rows=5462 width=4), ->  Hash  (cost=4.00..4.00 rows=200 width=17)
+->  Seq Scan on actor a  (cost=0.00..4.00 rows=200 width=17), -> Hash  (cost=66.50..66.50 rows=1000 width=4),
+->  Seq Scan on film f  (cost=0.00..66.50 rows=1000 width=4), Filter: ((release_year)::integer = 2006)
+
+-- 7. What is the average rental rate per genre?
+SELECT name AS Genre, ROUND(AVG(rental_rate), 2) AS Average_Rental_Rate
+FROM category
+INNER JOIN film_category 
+USING(category_id)
+INNER JOIN film
+USING(film_id)
+GROUP BY Genre;
+/* Name and rental rate were selected from the category and film table. Name was aliased as genre, 
+the rental rate aliased as Average_Rental_Rate and was aggregated to get the average for each rental
+and rounded to two decimal places. Category was joined with film_cateogry by the category_id column 
+and the film table was joined by the film_id column. The rows were grouped by genre. */
+
+-- 8.	How many films were returned late? Early? On time?
+
+SELECT 
+COUNT(CASE 
+WHEN rental_duration > date_part('day', return_date - rental_date) THEN 'Returned Early'
+	 END) AS Return_Early, 
+COUNT(CASE 
+	  WHEN rental_duration < date_part('day', return_date - rental_date) THEN 'Returned Late'
+	 END) AS Return_Late ,
+COUNT(CASE 
+	  WHEN rental_duration = date_part('day', return_date - rental_date) THEN 'Returned on time'
+END) AS Return_Ontime
+
+FROM film
+INNER JOIN inventory
+USING(film_id)
+INNER JOIN rental 
+USING(inventory_id); 
+
+-- 7,738 films were returned on early, 6,403 were returned late, and 1,720 were returned on time.
+/* Used CASE with aggregate function COUNT, to count the number of films that were early, late, and ontime
+To extract the day from the timestamp in the rental_date and return_date field, date_part function with 
+day value passed to the function. Subtracting the rental_date from return date set the duration of a film rental
+Inner joins were used for film, inventory, and rental to get the rental duration, return, and rental date fields */
+
+
+-- 9. What categories are the most rented and what are their total sales?
+
+SELECT c.name AS Genre, COUNT(rental_id) AS Num_of_rentals, SUM(p.amount) AS total_sales 
+FROM category AS c
+INNER JOIN film_category AS fc
+USING(category_id)
+INNER JOIN film as f
+USING(film_id)
+INNER JOIN inventory AS i
+USING(film_id)
+INNER JOIN rental AS r
+USING(inventory_id)
+INNER JOIN payment as p
+USING(rental_id)
+GROUP BY Genre
+ORDER BY Num_of_rentals DESC; 
+
+-- The most rented categories (genres) are Sports($4892.19), Animation($4245.31), and Action($3951.84).
+/* Join category, film category, film, inventory, rental, and payment tables to find out which genre(category)
+was rented the most and to get those genre's total sales. The using clause was used to join the tables based
+on the same column names. The most rented genres were ordered by most rented to least rented*/
+
+
+-- 10.	Create a view for 8 and a view for 9. Be sure to name them appropriately. 
+
+CREATE VIEW question8 AS
+SELECT 
+COUNT(CASE 
+WHEN rental_duration > date_part('day', return_date - rental_date) THEN 'Returned Early'
+	 END) AS Return_Early, 
+COUNT(CASE 
+	  WHEN rental_duration < date_part('day', return_date - rental_date) THEN 'Returned Late'
+	 END) AS Return_Late ,
+COUNT(CASE 
+	  WHEN rental_duration = date_part('day', return_date - rental_date) THEN 'Returned on time'
+END) AS Return_Ontime
+
+FROM film
+INNER JOIN inventory
+USING(film_id)
+INNER JOIN rental 
+USING(inventory_id);
+
+CREATE VIEW question_9 AS
+SELECT c.name AS Genre, COUNT(rental_id) AS Num_of_rentals, SUM(p.amount) AS total_sales 
+FROM category AS c
+INNER JOIN film_category AS fc
+USING(category_id)
+INNER JOIN film as f
+USING(film_id)
+INNER JOIN inventory AS i
+USING(film_id)
+INNER JOIN rental AS r
+USING(inventory_id)
+INNER JOIN payment as p
+USING(rental_id)
+GROUP BY Genre
+ORDER BY Num_of_rentals DESC;
